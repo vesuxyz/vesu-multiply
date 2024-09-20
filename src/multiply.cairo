@@ -67,6 +67,8 @@ pub struct DecreaseLeverParams {
 
 #[starknet::interface]
 pub trait IMultiply<TContractState> {
+    fn fee_rate(self: @TContractState) -> u128;
+    fn set_fee_rate(ref self: TContractState, fee_rate: u128);
     fn modify_lever(
         ref self: TContractState, modify_lever_params: ModifyLeverParams
     ) -> ModifyLeverResponse;
@@ -90,7 +92,7 @@ pub mod Multiply {
         data_model::{
             ModifyPositionParams, Amount, AmountType, AmountDenomination, UpdatePositionResponse
         },
-        common::{i257, i257_new}
+        common::{i257, i257_new}, units::{SCALE, SCALE_128}
     };
 
     use super::{
@@ -101,7 +103,9 @@ pub mod Multiply {
     #[storage]
     struct Storage {
         core: ICoreDispatcher,
-        singleton: ISingletonDispatcher
+        singleton: ISingletonDispatcher,
+        owner: ContractAddress,
+        fee_rate: u128
     }
 
     #[derive(Drop, starknet::Event)]
@@ -147,6 +151,7 @@ pub mod Multiply {
     ) {
         self.core.write(core);
         self.singleton.write(singleton);
+        self.owner.write(get_caller_address());
     }
 
     #[generate_trait]
@@ -213,7 +218,7 @@ pub mod Multiply {
             let first = first_swap_amount.unwrap();
             assert!(first.amount.mag == swap.token_amount.amount.mag, "partial-swap");
 
-            let (input, output) = if !swap.token_amount.amount.is_negative() {
+            let (input, mut output) = if !swap.token_amount.amount.is_negative() {
                 // exact in: limit_amount is min. amount out
                 assert!(token_amount.amount.mag >= swap.limit_amount, "limit-amount-exceeded");
                 (first, token_amount)
@@ -290,7 +295,7 @@ pub mod Multiply {
             // for depositing an exact amount of collateral:
             //   - input token: collateral asset and output token: debt asset, since we specify a negative input amount
             //     of the collateral asset (swap direction is reversed)
-            let (debt_amount, collateral_amount) = if lever_swap.route.len() != 0 {
+            let (debt_amount, mut collateral_amount) = if lever_swap.route.len() != 0 {
                 self.swap(lever_swap.clone())
             } else {
                 (
@@ -311,6 +316,10 @@ pub mod Multiply {
                 i129_new(collateral_amount.amount.mag, true),
                 get_contract_address()
             );
+
+            // charge swap fee
+            let fee = self.fee_rate.read() * collateral_amount.amount.mag / SCALE_128;
+            collateral_amount.amount.mag -= fee;
 
             let singleton = self.singleton.read();
 
@@ -571,6 +580,16 @@ pub mod Multiply {
 
     #[abi(embed_v0)]
     impl MultiplyImpl of IMultiply<ContractState> {
+        fn set_fee_rate(ref self: ContractState, fee_rate: u128) {
+            assert!(get_caller_address() == self.owner.read(), "caller-not-owner");
+            assert!(fee_rate < SCALE_128, "invalid-fee-rate");
+            self.fee_rate.write(fee_rate);
+        }
+
+        fn fee_rate(self: @ContractState) -> u128 {
+            self.fee_rate.read()
+        }
+
         fn modify_lever(
             ref self: ContractState, modify_lever_params: ModifyLeverParams
         ) -> ModifyLeverResponse {

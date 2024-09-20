@@ -21,7 +21,8 @@ mod TestMultiply {
         types::{i129::{i129_new, i129Trait}, keys::{PoolKey},}
     };
     use vesu::{
-        units::SCALE, data_model::{Amount, AmountType, AmountDenomination, ModifyPositionParams},
+        units::{SCALE, SCALE_128},
+        data_model::{Amount, AmountType, AmountDenomination, ModifyPositionParams},
         singleton::{ISingletonDispatcher, ISingletonDispatcherTrait}, test::setup::deploy_with_args,
         common::{i257, i257_new}
     };
@@ -207,10 +208,12 @@ mod TestMultiply {
     #[test]
     #[available_gas(20000000)]
     #[fork("Mainnet")]
-    fn test_modify_lever_exact_collateral_deposit() {
+    fn test_modify_lever_exact_collateral_deposit_with_fee() {
         let TestConfig { singleton, multiply, pool_id, pool_key, eth, usdc, user, .. } = setup();
 
         let usdc_balance_before = usdc.balanceOf(user);
+
+        multiply.set_fee_rate(SCALE_128 / 100);
 
         usdc.approve(multiply.contract_address, 10000_000_000.into());
         singleton.modify_delegation(pool_id, multiply.contract_address, true);
@@ -247,10 +250,16 @@ mod TestMultiply {
         let (_, collateral, _) = singleton
             .position(pool_id, usdc.contract_address, eth.contract_address, user);
 
+        let deposit = increase_lever_params.add_margin.into()
+            + increase_lever_params.lever_swap.token_amount.amount.mag.into();
+
         assert!(
             collateral
-                + 1 == increase_lever_params.add_margin.into()
-                + increase_lever_params.lever_swap.token_amount.amount.mag.into()
+                + 1 == (deposit
+                    - (increase_lever_params.lever_swap.token_amount.amount.mag.into()
+                        * multiply.fee_rate()
+                        / SCALE_128))
+                    .into()
         );
 
         assert!(
