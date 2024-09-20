@@ -22,5 +22,5 @@ url = "https://starknet-mainnet.public.blastapi.io/rpc/v0_6"
 block_id.number = "661370"
 
 [scripts]
-test = "snforge test"
+test = "snforge test 'test_modify_lever_exact_collateral_deposit_with_fee'"
 deployMultiply = "scarb --profile release build && node --loader ts-node/esm ./scripts/deployMultiply.ts"

@@ -265,6 +265,9 @@ mod TestMultiply {
         assert!(
             usdc.balanceOf(user) == usdc_balance_before - increase_lever_params.add_margin.into()
         );
+
+        assert!(usdc.balanceOf(multiply.contract_address) > 0);
+        assert!(multiply.claim_fees(get_contract_address(), usdc.contract_address) > 0);
     }
 
     #[test]

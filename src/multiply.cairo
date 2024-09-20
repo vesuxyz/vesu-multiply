@@ -69,6 +69,9 @@ pub struct DecreaseLeverParams {
 pub trait IMultiply<TContractState> {
     fn fee_rate(self: @TContractState) -> u128;
     fn set_fee_rate(ref self: TContractState, fee_rate: u128);
+    fn claim_fees(
+        ref self: TContractState, recipient: ContractAddress, token: ContractAddress
+    ) -> u256;
     fn modify_lever(
         ref self: TContractState, modify_lever_params: ModifyLeverParams
     ) -> ModifyLeverResponse;
@@ -138,11 +141,21 @@ pub mod Multiply {
         debt_delta: u256
     }
 
+    #[derive(Drop, starknet::Event)]
+    struct ClaimFees {
+        #[key]
+        recipient: ContractAddress,
+        #[key]
+        token: ContractAddress,
+        amount: u256
+    }
+
     #[event]
     #[derive(Drop, starknet::Event)]
     enum Event {
         IncreaseLever: IncreaseLever,
-        DecreaseLever: DecreaseLever
+        DecreaseLever: DecreaseLever,
+        ClaimFees: ClaimFees
     }
 
     #[constructor]
@@ -580,14 +593,25 @@ pub mod Multiply {
 
     #[abi(embed_v0)]
     impl MultiplyImpl of IMultiply<ContractState> {
+        fn fee_rate(self: @ContractState) -> u128 {
+            self.fee_rate.read()
+        }
+
         fn set_fee_rate(ref self: ContractState, fee_rate: u128) {
             assert!(get_caller_address() == self.owner.read(), "caller-not-owner");
             assert!(fee_rate < SCALE_128, "invalid-fee-rate");
             self.fee_rate.write(fee_rate);
         }
 
-        fn fee_rate(self: @ContractState) -> u128 {
-            self.fee_rate.read()
+        fn claim_fees(
+            ref self: ContractState, recipient: ContractAddress, token: ContractAddress
+        ) -> u256 {
+            assert!(get_caller_address() == self.owner.read(), "caller-not-owner");
+            let token = IERC20Dispatcher { contract_address: token };
+            let amount = token.balanceOf(get_contract_address());
+            assert!(token.transfer(recipient, amount), "transfer-failed");
+            self.emit(ClaimFees { recipient, token: token.contract_address, amount });
+            amount
         }
 
         fn modify_lever(
