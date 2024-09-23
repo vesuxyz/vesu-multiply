@@ -63,7 +63,7 @@ mod TestMultiply {
         };
         let multiply = IMultiplyDispatcher {
             contract_address: deploy_with_args(
-                "Multiply", array![ekubo.contract_address.into(), singleton.contract_address.into()]
+                "Multiply", array![ekubo.contract_address.into(), singleton.contract_address.into(), get_contract_address().into()]
             )
         };
 

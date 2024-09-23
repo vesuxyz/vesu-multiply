@@ -112,6 +112,15 @@ pub mod Multiply {
     }
 
     #[derive(Drop, starknet::Event)]
+    struct ClaimFees {
+        #[key]
+        recipient: ContractAddress,
+        #[key]
+        token: ContractAddress,
+        amount: u256
+    }
+
+    #[derive(Drop, starknet::Event)]
     struct IncreaseLever {
         #[key]
         pool_id: felt252,
@@ -141,30 +150,21 @@ pub mod Multiply {
         debt_delta: u256
     }
 
-    #[derive(Drop, starknet::Event)]
-    struct ClaimFees {
-        #[key]
-        recipient: ContractAddress,
-        #[key]
-        token: ContractAddress,
-        amount: u256
-    }
-
     #[event]
     #[derive(Drop, starknet::Event)]
     enum Event {
+        ClaimFees: ClaimFees,
         IncreaseLever: IncreaseLever,
-        DecreaseLever: DecreaseLever,
-        ClaimFees: ClaimFees
+        DecreaseLever: DecreaseLever
     }
 
     #[constructor]
     fn constructor(
-        ref self: ContractState, core: ICoreDispatcher, singleton: ISingletonDispatcher
+        ref self: ContractState, core: ICoreDispatcher, singleton: ISingletonDispatcher, owner: ContractAddress
     ) {
         self.core.write(core);
         self.singleton.write(singleton);
-        self.owner.write(get_caller_address());
+        self.owner.write(owner);
     }
 
     #[generate_trait]
