@@ -49,7 +49,8 @@ pub struct IncreaseLeverParams {
     pub user: ContractAddress,
     pub add_margin: u128,
     pub margin_swap: Swap,
-    pub lever_swap: Swap
+    pub lever_swap: Swap,
+    pub fee_recipient: ContractAddress
 }
 
 #[derive(Serde, Drop, Clone)]
@@ -67,11 +68,8 @@ pub struct DecreaseLeverParams {
 
 #[starknet::interface]
 pub trait IMultiply<TContractState> {
-    fn fee_rate(self: @TContractState) -> u128;
+    fn fee_rate(self: @TContractState, user: ContractAddress) -> u128;
     fn set_fee_rate(ref self: TContractState, fee_rate: u128);
-    fn claim_fees(
-        ref self: TContractState, recipient: ContractAddress, token: ContractAddress
-    ) -> u256;
     fn modify_lever(
         ref self: TContractState, modify_lever_params: ModifyLeverParams
     ) -> ModifyLeverResponse;
@@ -80,6 +78,8 @@ pub trait IMultiply<TContractState> {
 #[starknet::contract]
 pub mod Multiply {
     use starknet::{ContractAddress, get_contract_address, get_caller_address};
+
+    use core::num::traits::{Zero};
 
     use ekubo::{
         components::{shared_locker::{consume_callback_data, handle_delta, call_core_with_callback}},
@@ -108,7 +108,8 @@ pub mod Multiply {
         core: ICoreDispatcher,
         singleton: ISingletonDispatcher,
         owner: ContractAddress,
-        fee_rate: u128
+        // user -> fee_rate
+        fee_rate: LegacyMap::<ContractAddress, u128>,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -160,7 +161,10 @@ pub mod Multiply {
 
     #[constructor]
     fn constructor(
-        ref self: ContractState, core: ICoreDispatcher, singleton: ISingletonDispatcher, owner: ContractAddress
+        ref self: ContractState,
+        core: ICoreDispatcher,
+        singleton: ISingletonDispatcher,
+        owner: ContractAddress
     ) {
         self.core.write(core);
         self.singleton.write(singleton);
@@ -255,7 +259,8 @@ pub mod Multiply {
             user,
             add_margin,
             margin_swap,
-            lever_swap } =
+            lever_swap,
+            fee_recipient } =
                 increase_lever_params;
 
             // - swap margin asset to collateral asset (1.)
@@ -331,8 +336,16 @@ pub mod Multiply {
             );
 
             // charge swap fee
-            let fee = self.fee_rate.read() * collateral_amount.amount.mag / SCALE_128;
-            collateral_amount.amount.mag -= fee;
+            let fee = self.fee_rate.read(user) * collateral_amount.amount.mag / SCALE_128;
+            if fee > 0 {
+                assert!(fee_recipient != Zero::zero(), "zero-fee-recipient");
+                collateral_amount.amount.mag -= fee;
+                assert!(
+                    IERC20Dispatcher { contract_address: collateral_asset }
+                        .transfer(fee_recipient, fee.into()),
+                    "transfer-failed"
+                );
+            }
 
             let singleton = self.singleton.read();
 
@@ -593,25 +606,13 @@ pub mod Multiply {
 
     #[abi(embed_v0)]
     impl MultiplyImpl of IMultiply<ContractState> {
-        fn fee_rate(self: @ContractState) -> u128 {
-            self.fee_rate.read()
+        fn fee_rate(self: @ContractState, user: ContractAddress) -> u128 {
+            self.fee_rate.read(user)
         }
 
         fn set_fee_rate(ref self: ContractState, fee_rate: u128) {
-            assert!(get_caller_address() == self.owner.read(), "caller-not-owner");
             assert!(fee_rate < SCALE_128, "invalid-fee-rate");
-            self.fee_rate.write(fee_rate);
-        }
-
-        fn claim_fees(
-            ref self: ContractState, recipient: ContractAddress, token: ContractAddress
-        ) -> u256 {
-            assert!(get_caller_address() == self.owner.read(), "caller-not-owner");
-            let token = IERC20Dispatcher { contract_address: token };
-            let amount = token.balanceOf(get_contract_address());
-            assert!(token.transfer(recipient, amount), "transfer-failed");
-            self.emit(ClaimFees { recipient, token: token.contract_address, amount });
-            amount
+            self.fee_rate.write(get_caller_address(), fee_rate);
         }
 
         fn modify_lever(

@@ -63,7 +63,12 @@ mod TestMultiply {
         };
         let multiply = IMultiplyDispatcher {
             contract_address: deploy_with_args(
-                "Multiply", array![ekubo.contract_address.into(), singleton.contract_address.into(), get_contract_address().into()]
+                "Multiply",
+                array![
+                    ekubo.contract_address.into(),
+                    singleton.contract_address.into(),
+                    get_contract_address().into()
+                ]
             )
         };
 
@@ -182,7 +187,8 @@ mod TestMultiply {
                 route: array![],
                 token_amount: TokenAmount { token: Zero::zero(), amount: Zero::zero(), },
                 limit_amount: Zero::zero(),
-            }
+            },
+            fee_recipient: Zero::zero()
         };
 
         let modify_lever_params = ModifyLeverParams {
@@ -213,10 +219,14 @@ mod TestMultiply {
 
         let usdc_balance_before = usdc.balanceOf(user);
 
+        start_prank(CheatTarget::One(usdc.contract_address), user);
         multiply.set_fee_rate(SCALE_128 / 100);
+        stop_prank(CheatTarget::One(usdc.contract_address));
 
         usdc.approve(multiply.contract_address, 10000_000_000.into());
         singleton.modify_delegation(pool_id, multiply.contract_address, true);
+
+        let fee_recipient = contract_address_const::<0x1>();
 
         let increase_lever_params = IncreaseLeverParams {
             pool_id,
@@ -238,7 +248,8 @@ mod TestMultiply {
                     amount: i129_new((100_000_000).try_into().unwrap(), true)
                 },
                 limit_amount: 30000000000000000, // 0.03 ETH
-            }
+            },
+            fee_recipient: fee_recipient
         };
 
         let modify_lever_params = ModifyLeverParams {
@@ -257,7 +268,7 @@ mod TestMultiply {
             collateral
                 + 1 == (deposit
                     - (increase_lever_params.lever_swap.token_amount.amount.mag.into()
-                        * multiply.fee_rate()
+                        * multiply.fee_rate(user)
                         / SCALE_128))
                     .into()
         );
@@ -266,8 +277,7 @@ mod TestMultiply {
             usdc.balanceOf(user) == usdc_balance_before - increase_lever_params.add_margin.into()
         );
 
-        assert!(usdc.balanceOf(multiply.contract_address) > 0);
-        assert!(multiply.claim_fees(get_contract_address(), usdc.contract_address) > 0);
+        assert!(usdc.balanceOf(fee_recipient) > 0);
     }
 
     #[test]
@@ -301,7 +311,8 @@ mod TestMultiply {
                     amount: i129_new((30000000000000000).try_into().unwrap(), false),
                 },
                 limit_amount: Zero::zero(),
-            }
+            },
+            fee_recipient: Zero::zero()
         };
 
         let modify_lever_params = ModifyLeverParams {
@@ -367,7 +378,8 @@ mod TestMultiply {
                     amount: i129_new((100_000_000).try_into().unwrap(), true)
                 },
                 limit_amount: 30000000000000000, // 0.03 ETH
-            }
+            },
+            fee_recipient: Zero::zero()
         };
 
         let modify_lever_params = ModifyLeverParams {
@@ -437,7 +449,8 @@ mod TestMultiply {
                     amount: i129_new((100_000_000).try_into().unwrap(), true)
                 },
                 limit_amount: 30000000000000000, // 0.03 ETH
-            }
+            },
+            fee_recipient: Zero::zero()
         };
 
         let modify_lever_params = ModifyLeverParams {
@@ -488,7 +501,8 @@ mod TestMultiply {
                     amount: i129_new((300_000_000).try_into().unwrap(), true)
                 },
                 limit_amount: 90000000000000000, // 0.09 ETH
-            }
+            },
+            fee_recipient: Zero::zero()
         };
 
         let modify_lever_params = ModifyLeverParams {
@@ -572,7 +586,8 @@ mod TestMultiply {
                     amount: i129_new((300_000_000).try_into().unwrap(), true)
                 },
                 limit_amount: 90000000000000000, // 0.09 ETH
-            }
+            },
+            fee_recipient: Zero::zero()
         };
 
         let modify_lever_params = ModifyLeverParams {
@@ -653,7 +668,8 @@ mod TestMultiply {
                     amount: i129_new((100_000_000).try_into().unwrap(), true)
                 },
                 limit_amount: 30000000000000000, // 0.03 ETH
-            }
+            },
+            fee_recipient: Zero::zero()
         };
 
         let modify_lever_params = ModifyLeverParams {
@@ -748,7 +764,8 @@ mod TestMultiply {
                     amount: i129_new((300_000_000).try_into().unwrap(), true)
                 },
                 limit_amount: 90000000000000000, // 0.09 ETH
-            }
+            },
+            fee_recipient: Zero::zero()
         };
 
         let modify_lever_params = ModifyLeverParams {
@@ -842,7 +859,8 @@ mod TestMultiply {
                     amount: i129_new((100_000_000).try_into().unwrap(), true)
                 },
                 limit_amount: 30000000000000000, // 0.03 ETH
-            }
+            },
+            fee_recipient: Zero::zero()
         };
 
         let modify_lever_params = ModifyLeverParams {
@@ -946,7 +964,8 @@ mod TestMultiply {
                     amount: i129_new((100_000_000).try_into().unwrap(), true)
                 },
                 limit_amount: 30000000000000000, // 0.03 ETH
-            }
+            },
+            fee_recipient: Zero::zero()
         };
 
         let modify_lever_params = ModifyLeverParams {
@@ -1016,7 +1035,8 @@ mod TestMultiply {
                     amount: i129_new((100_000_000).try_into().unwrap(), true)
                 },
                 limit_amount: 10000000000000000, // 0.01 ETH
-            }
+            },
+            fee_recipient: Zero::zero()
         };
 
         let modify_lever_params = ModifyLeverParams {
