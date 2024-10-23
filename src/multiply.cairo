@@ -48,8 +48,8 @@ pub struct IncreaseLeverParams {
     pub debt_asset: ContractAddress,
     pub user: ContractAddress,
     pub add_margin: u128,
-    pub margin_swap: Swap,
-    pub lever_swap: Swap
+    pub margin_swap: Array<Swap>,
+    pub lever_swap: Array<Swap>
 }
 
 #[derive(Serde, Drop, Clone)]
@@ -60,8 +60,10 @@ pub struct DecreaseLeverParams {
     pub user: ContractAddress,
     pub sub_margin: u128,
     pub recipient: ContractAddress,
-    pub lever_swap: Swap,
-    pub withdraw_swap: Swap,
+    pub lever_swap: Array<Swap>,
+    pub lever_swap_weights: Array<u256>,
+    pub withdraw_swap: Array<Swap>,
+    pub withdraw_swap_weights: Array<u256>,
     pub close_position: bool
 }
 
@@ -90,7 +92,7 @@ pub mod Multiply {
         data_model::{
             ModifyPositionParams, Amount, AmountType, AmountDenomination, UpdatePositionResponse
         },
-        common::{i257, i257_new}
+        common::{i257, i257_new}, units::SCALE
     };
 
     use super::{
@@ -151,79 +153,115 @@ pub mod Multiply {
 
     #[generate_trait]
     impl InternalFunctions of InternalFunctionsTrait {
-        fn swap(ref self: ContractState, swap: Swap) -> (TokenAmount, TokenAmount) {
+        fn swap(ref self: ContractState, mut swaps: Array<Swap>) -> (TokenAmount, TokenAmount) {
             let core = self.core.read();
 
-            let mut route = swap.route;
-            let mut token_amount = swap.token_amount;
+            let mut input_amount: Option<TokenAmount> = Option::None;
+            let mut output_amount: Option<TokenAmount> = Option::None;
 
-            // we track this to know how much to pay in the case of exact input and how much to pull in the case of exact output
-            let mut first_swap_amount: Option<TokenAmount> = Option::None;
+            while let Option::Some(swap) = swaps
+                .pop_front() {
+                    let mut route = swap.route;
+                    let mut token_amount = swap.token_amount;
 
-            loop {
-                match route.pop_front() {
-                    Option::Some(node) => {
-                        let is_token1 = token_amount.token == node.pool_key.token1;
+                    // we track this to know how much to pay in the case of exact input and how much to pull in the case of exact output
+                    let mut first_swap_amount: Option<TokenAmount> = Option::None;
 
-                        let delta = core
-                            .swap(
-                                node.pool_key,
-                                SwapParameters {
-                                    amount: token_amount.amount,
-                                    is_token1: is_token1,
-                                    sqrt_ratio_limit: node.sqrt_ratio_limit,
-                                    skip_ahead: node.skip_ahead,
-                                }
-                            );
+                    loop {
+                        match route.pop_front() {
+                            Option::Some(node) => {
+                                let is_token1 = token_amount.token == node.pool_key.token1;
 
-                        if is_token1 {
-                            assert!(delta.amount1.mag == token_amount.amount.mag, "partial-swap");
-                        } else {
-                            assert!(delta.amount0.mag == token_amount.amount.mag, "partial-swap");
-                        }
+                                let delta = core
+                                    .swap(
+                                        node.pool_key,
+                                        SwapParameters {
+                                            amount: token_amount.amount,
+                                            is_token1: is_token1,
+                                            sqrt_ratio_limit: node.sqrt_ratio_limit,
+                                            skip_ahead: node.skip_ahead,
+                                        }
+                                    );
 
-                        if first_swap_amount.is_none() {
-                            first_swap_amount =
                                 if is_token1 {
-                                    Option::Some(
-                                        TokenAmount {
-                                            token: node.pool_key.token1, amount: delta.amount1
-                                        }
-                                    )
+                                    assert!(
+                                        delta.amount1.mag == token_amount.amount.mag, "partial-swap"
+                                    );
                                 } else {
-                                    Option::Some(
-                                        TokenAmount {
-                                            token: node.pool_key.token0, amount: delta.amount0
-                                        }
-                                    )
+                                    assert!(
+                                        delta.amount0.mag == token_amount.amount.mag, "partial-swap"
+                                    );
                                 }
+
+                                if first_swap_amount.is_none() {
+                                    first_swap_amount =
+                                        if is_token1 {
+                                            Option::Some(
+                                                TokenAmount {
+                                                    token: node.pool_key.token1,
+                                                    amount: delta.amount1
+                                                }
+                                            )
+                                        } else {
+                                            Option::Some(
+                                                TokenAmount {
+                                                    token: node.pool_key.token0,
+                                                    amount: delta.amount0
+                                                }
+                                            )
+                                        }
+                                }
+
+                                token_amount =
+                                    if (is_token1) {
+                                        TokenAmount {
+                                            amount: -delta.amount0, token: node.pool_key.token0
+                                        }
+                                    } else {
+                                        TokenAmount {
+                                            amount: -delta.amount1, token: node.pool_key.token1
+                                        }
+                                    };
+                            },
+                            Option::None => { break (); }
+                        };
+                    };
+
+                    let first = first_swap_amount.unwrap();
+                    assert!(first.amount.mag == swap.token_amount.amount.mag, "partial-swap");
+
+                    let (input, output) = if !swap.token_amount.amount.is_negative() {
+                        // exact in: limit_amount is min. amount out
+                        assert!(
+                            token_amount.amount.mag >= swap.limit_amount, "limit-amount-exceeded"
+                        );
+                        (first, token_amount)
+                    } else {
+                        // exact out: limit_amount is max. amount in
+                        assert!(
+                            token_amount.amount.mag <= swap.limit_amount, "limit-amount-exceeded"
+                        );
+                        (token_amount, first)
+                    };
+
+                    match (input_amount) {
+                        Option::None => { input_amount = Option::Some(input); },
+                        Option::Some(mut amount) => {
+                            amount.amount = amount.amount + input.amount;
+                            input_amount = Option::Some(amount);
                         }
+                    };
 
-                        token_amount =
-                            if (is_token1) {
-                                TokenAmount { amount: -delta.amount0, token: node.pool_key.token0 }
-                            } else {
-                                TokenAmount { amount: -delta.amount1, token: node.pool_key.token1 }
-                            };
-                    },
-                    Option::None => { break (); }
+                    match (output_amount) {
+                        Option::None => { output_amount = Option::Some(output); },
+                        Option::Some(mut amount) => {
+                            amount.amount = amount.amount + output.amount;
+                            output_amount = Option::Some(amount);
+                        }
+                    };
                 };
-            };
 
-            let first = first_swap_amount.unwrap();
-            assert!(first.amount.mag == swap.token_amount.amount.mag, "partial-swap");
-
-            let (input, output) = if !swap.token_amount.amount.is_negative() {
-                // exact in: limit_amount is min. amount out
-                assert!(token_amount.amount.mag >= swap.limit_amount, "limit-amount-exceeded");
-                (first, token_amount)
-            } else {
-                // exact out: limit_amount is max. amount in
-                assert!(token_amount.amount.mag <= swap.limit_amount, "limit-amount-exceeded");
-                (token_amount, first)
-            };
-
-            (input, output)
+            (input_amount.unwrap(), output_amount.unwrap())
         }
 
         fn increase_lever(
@@ -241,7 +279,7 @@ pub mod Multiply {
                 increase_lever_params;
 
             // - swap margin asset to collateral asset (1.)
-            let margin_amount = if margin_swap.route.len() != 0 {
+            let margin_amount = if margin_swap.len() != 0 {
                 let (margin_amount_, collateral_amount_) = self.swap(margin_swap.clone());
                 assert!(
                     add_margin == 0 && collateral_amount_.token == collateral_asset,
@@ -290,7 +328,7 @@ pub mod Multiply {
             // for depositing an exact amount of collateral:
             //   - input token: collateral asset and output token: debt asset, since we specify a negative input amount
             //     of the collateral asset (swap direction is reversed)
-            let (debt_amount, collateral_amount) = if lever_swap.route.len() != 0 {
+            let (debt_amount, collateral_amount) = if lever_swap.len() != 0 {
                 self.swap(lever_swap.clone())
             } else {
                 (
@@ -375,6 +413,37 @@ pub mod Multiply {
             };
         }
 
+        fn apply_weights(
+            ref self: ContractState,
+            mut swaps: Array<Swap>,
+            mut relative_weights: Array<u256>,
+            amount: u256
+        ) -> Array<Swap> {
+            assert!(
+                swaps.len() == relative_weights.len(), "swaps-relative-weights-length-mismatch"
+            );
+
+            let mut adjusted_lever_swaps = ArrayTrait::new();
+            while let Option::Some(swap) = swaps
+                .pop_front() {
+                    let percentage = relative_weights.pop_front().unwrap();
+                    let amount = amount * percentage / SCALE;
+                    adjusted_lever_swaps
+                        .append(
+                            Swap {
+                                route: swap.route,
+                                token_amount: TokenAmount {
+                                    token: swap.token_amount.token,
+                                    amount: i129_new(amount.try_into().unwrap(), true)
+                                },
+                                limit_amount: swap.limit_amount
+                            }
+                        );
+                };
+
+            adjusted_lever_swaps
+        }
+
         fn decrease_lever(
             ref self: ContractState, decrease_lever_params: DecreaseLeverParams
         ) -> ModifyLeverResponse {
@@ -385,19 +454,28 @@ pub mod Multiply {
             mut sub_margin,
             recipient,
             mut lever_swap,
+            lever_swap_weights,
             mut withdraw_swap,
+            withdraw_swap_weights,
             close_position } =
                 decrease_lever_params;
 
             if close_position {
-                assert!(
-                    lever_swap.token_amount.token == debt_asset
-                        && lever_swap.token_amount.amount.mag == 0,
-                    "invalid-lever-swap-params-for-close-position"
-                );
+                let mut swaps = lever_swap.clone();
+                while let Option::Some(swap) = swaps
+                    .pop_front() {
+                        assert!(
+                            swap.token_amount.token == debt_asset
+                                && swap.token_amount.amount.mag == 0,
+                            "invalid-lever-swap-params-for-close-position"
+                        );
+                    };
+
                 let singleton = self.singleton.read();
                 let (_, _, debt) = singleton.position(pool_id, collateral_asset, debt_asset, user);
-                lever_swap.token_amount.amount = i129_new(debt.try_into().unwrap(), true);
+
+                // apply weights to lever_swap token amounts
+                lever_swap = self.apply_weights(lever_swap, lever_swap_weights, debt);
                 assert!(sub_margin == 0, "invalid-sub-margin-for-close-position");
             }
 
@@ -408,7 +486,7 @@ pub mod Multiply {
             // for repaying an exact amount of debt:
             //   - input token: debt asset and output token: collateral asset, since we specify a negative input amount
             //     of the debt asset (swap direction is reversed)
-            let (collateral_amount, debt_amount) = if lever_swap.route.len() != 0 {
+            let (collateral_amount, debt_amount) = if lever_swap.len() != 0 {
                 self.swap(lever_swap.clone())
             } else {
                 (
@@ -507,7 +585,7 @@ pub mod Multiply {
                 );
 
             // avoid withdraw_swap moving error by returning early here
-            if withdraw_swap.route.len() == 0 {
+            if withdraw_swap.len() == 0 {
                 assert!(
                     IERC20Dispatcher { contract_address: collateral_asset }
                         .transfer(recipient, residual_collateral.into()),
@@ -521,13 +599,19 @@ pub mod Multiply {
             }
 
             // - swap residual / margin collateral amount to arbitrary asset and handle delta
-            assert!(
-                withdraw_swap.token_amount.token == collateral_asset
-                    && withdraw_swap.token_amount.amount.mag == 0,
-                "invalid-withdraw-swap-config"
-            );
+            let mut swaps = withdraw_swap.clone();
+            while let Option::Some(swap) = swaps
+                .pop_front() {
+                    assert!(
+                        swap.token_amount.token == collateral_asset
+                            && swap.token_amount.amount.mag == 0,
+                        "invalid-withdraw-swap-config"
+                    );
+                };
 
-            withdraw_swap.token_amount.amount = i129_new(residual_collateral, false);
+            // apply weights to withdraw_swap token amounts
+            withdraw_swap = self
+                .apply_weights(withdraw_swap, withdraw_swap_weights, residual_collateral.into());
 
             // collateral_asset to arbitrary_asset
             // token_amount is always positive, limit_amount is min. amount out:
