@@ -167,65 +167,59 @@ pub mod Multiply {
                     // we track this to know how much to pay in the case of exact input and how much to pull in the case of exact output
                     let mut first_swap_amount: Option<TokenAmount> = Option::None;
 
-                    loop {
-                        match route.pop_front() {
-                            Option::Some(node) => {
-                                let is_token1 = token_amount.token == node.pool_key.token1;
+                    while let Option::Some(node) = route
+                        .pop_front() {
+                            let is_token1 = token_amount.token == node.pool_key.token1;
 
-                                let delta = core
-                                    .swap(
-                                        node.pool_key,
-                                        SwapParameters {
-                                            amount: token_amount.amount,
-                                            is_token1: is_token1,
-                                            sqrt_ratio_limit: node.sqrt_ratio_limit,
-                                            skip_ahead: node.skip_ahead,
-                                        }
-                                    );
+                            let delta = core
+                                .swap(
+                                    node.pool_key,
+                                    SwapParameters {
+                                        amount: token_amount.amount,
+                                        is_token1: is_token1,
+                                        sqrt_ratio_limit: node.sqrt_ratio_limit,
+                                        skip_ahead: node.skip_ahead,
+                                    }
+                                );
 
-                                if is_token1 {
-                                    assert!(
-                                        delta.amount1.mag == token_amount.amount.mag, "partial-swap"
-                                    );
-                                } else {
-                                    assert!(
-                                        delta.amount0.mag == token_amount.amount.mag, "partial-swap"
-                                    );
-                                }
+                            if is_token1 {
+                                assert!(
+                                    delta.amount1.mag == token_amount.amount.mag, "partial-swap"
+                                );
+                            } else {
+                                assert!(
+                                    delta.amount0.mag == token_amount.amount.mag, "partial-swap"
+                                );
+                            }
 
-                                if first_swap_amount.is_none() {
-                                    first_swap_amount =
-                                        if is_token1 {
-                                            Option::Some(
-                                                TokenAmount {
-                                                    token: node.pool_key.token1,
-                                                    amount: delta.amount1
-                                                }
-                                            )
-                                        } else {
-                                            Option::Some(
-                                                TokenAmount {
-                                                    token: node.pool_key.token0,
-                                                    amount: delta.amount0
-                                                }
-                                            )
-                                        }
-                                }
-
-                                token_amount =
-                                    if (is_token1) {
-                                        TokenAmount {
-                                            amount: -delta.amount0, token: node.pool_key.token0
-                                        }
+                            if first_swap_amount.is_none() {
+                                first_swap_amount =
+                                    if is_token1 {
+                                        Option::Some(
+                                            TokenAmount {
+                                                token: node.pool_key.token1, amount: delta.amount1
+                                            }
+                                        )
                                     } else {
-                                        TokenAmount {
-                                            amount: -delta.amount1, token: node.pool_key.token1
-                                        }
-                                    };
-                            },
-                            Option::None => { break (); }
+                                        Option::Some(
+                                            TokenAmount {
+                                                token: node.pool_key.token0, amount: delta.amount0
+                                            }
+                                        )
+                                    }
+                            }
+
+                            token_amount =
+                                if (is_token1) {
+                                    TokenAmount {
+                                        amount: -delta.amount0, token: node.pool_key.token0
+                                    }
+                                } else {
+                                    TokenAmount {
+                                        amount: -delta.amount1, token: node.pool_key.token1
+                                    }
+                                };
                         };
-                    };
 
                     let first = first_swap_amount.unwrap();
                     assert!(first.amount.mag == swap.token_amount.amount.mag, "partial-swap");

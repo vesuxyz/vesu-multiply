@@ -172,16 +172,8 @@ mod TestMultiply {
             debt_asset: eth.contract_address,
             user,
             add_margin: 10000_000_000_u128,
-            margin_swap: array![Swap {
-                route: array![],
-                token_amount: TokenAmount { token: Zero::zero(), amount: Zero::zero(), },
-                limit_amount: Zero::zero(),
-            }],
-            lever_swap: array![Swap {
-                route: array![],
-                token_amount: TokenAmount { token: Zero::zero(), amount: Zero::zero(), },
-                limit_amount: Zero::zero(),
-            }],
+            margin_swap: array![],
+            lever_swap: array![],
         };
 
         let modify_lever_params = ModifyLeverParams {
@@ -193,12 +185,7 @@ mod TestMultiply {
         let (_, collateral, _) = singleton
             .position(pool_id, usdc.contract_address, eth.contract_address, user);
 
-        assert!(
-            collateral
-                + 1 == increase_lever_params.add_margin.into()
-                + (*increase_lever_params.lever_swap.at(0)).token_amount.amount.mag.into()
-            );
-            
+        assert!(collateral + 1 == increase_lever_params.add_margin.into());
         assert!(
             usdc.balanceOf(user) == usdc_balance_before - increase_lever_params.add_margin.into()
         );
@@ -221,21 +208,21 @@ mod TestMultiply {
             debt_asset: eth.contract_address,
             user,
             add_margin: 10000_000_000_u128,
-            margin_swap: array![Swap {
-                route: array![],
-                token_amount: TokenAmount { token: Zero::zero(), amount: Zero::zero(), },
-                limit_amount: Zero::zero(),
-            }],
-            lever_swap: array![Swap {
-                route: array![
-                    RouteNode { pool_key, sqrt_ratio_limit: MIN_SQRT_RATIO_LIMIT, skip_ahead: 0 }
-                ],
-                token_amount: TokenAmount {
-                    token: usdc.contract_address,
-                    amount: i129_new((100_000_000).try_into().unwrap(), true)
-                },
-                limit_amount: 30000000000000000, // 0.03 ETH
-            }],
+            margin_swap: array![],
+            lever_swap: array![
+                Swap {
+                    route: array![
+                        RouteNode {
+                            pool_key, sqrt_ratio_limit: MIN_SQRT_RATIO_LIMIT, skip_ahead: 0
+                        }
+                    ],
+                    token_amount: TokenAmount {
+                        token: usdc.contract_address,
+                        amount: i129_new((100_000_000).try_into().unwrap(), true)
+                    },
+                    limit_amount: 30000000000000000, // 0.03 ETH
+                }
+            ],
         };
 
         let modify_lever_params = ModifyLeverParams {
@@ -247,11 +234,9 @@ mod TestMultiply {
         let (_, collateral, _) = singleton
             .position(pool_id, usdc.contract_address, eth.contract_address, user);
 
-        assert!(
-            collateral
-                + 1 == increase_lever_params.add_margin.into()
-                + increase_lever_params.lever_swap[0].token_amount.amount.mag.into()
-        );
+        let y: @Swap = (increase_lever_params.lever_swap[0]);
+        let x: u256 = (*y.token_amount.amount.mag).into();
+        assert!(collateral + 1 == increase_lever_params.add_margin.into() + x);
 
         assert!(
             usdc.balanceOf(user) == usdc_balance_before - increase_lever_params.add_margin.into()
@@ -275,21 +260,21 @@ mod TestMultiply {
             debt_asset: eth.contract_address,
             user,
             add_margin: 10000_000_000_u128,
-            margin_swap: array![Swap {
-                route: array![],
-                token_amount: TokenAmount { token: Zero::zero(), amount: Zero::zero(), },
-                limit_amount: Zero::zero(),
-            }],
-                lever_swap: array![Swap {
-                route: array![
-                    RouteNode { pool_key, sqrt_ratio_limit: MIN_SQRT_RATIO_LIMIT, skip_ahead: 0 }
-                ],
-                token_amount: TokenAmount {
-                    token: eth.contract_address,
-                    amount: i129_new((30000000000000000).try_into().unwrap(), false),
-                },
-                limit_amount: Zero::zero(),
-            }], 
+            margin_swap: array![],
+            lever_swap: array![
+                Swap {
+                    route: array![
+                        RouteNode {
+                            pool_key, sqrt_ratio_limit: MIN_SQRT_RATIO_LIMIT, skip_ahead: 0
+                        }
+                    ],
+                    token_amount: TokenAmount {
+                        token: eth.contract_address,
+                        amount: i129_new((30000000000000000).try_into().unwrap(), false),
+                    },
+                    limit_amount: Zero::zero(),
+                }
+            ],
         };
 
         let modify_lever_params = ModifyLeverParams {
@@ -300,7 +285,10 @@ mod TestMultiply {
 
         let (_, _, debt) = singleton
             .position(pool_id, usdc.contract_address, eth.contract_address, user);
-        assert!(debt - 2 == increase_lever_params.lever_swap[0] .token_amount.amount.mag.into());
+
+        let y: @Swap = (increase_lever_params.lever_swap[0]);
+        let x: u256 = (*y.token_amount.amount.mag).into();
+        assert!(debt - 2 == x);
 
         assert!(
             usdc.balanceOf(user) == usdc_balance_before - increase_lever_params.add_margin.into()
@@ -334,28 +322,36 @@ mod TestMultiply {
             debt_asset: eth.contract_address,
             user,
             add_margin: 0_u128,
-            margin_swap: array![Swap {
-                route: array![
-                    RouteNode {
-                        pool_key: pool_key_2, sqrt_ratio_limit: MAX_SQRT_RATIO_LIMIT, skip_ahead: 0
-                    }
-                ],
-                token_amount: TokenAmount {
-                    token: usdc.contract_address,
-                    amount: i129_new((10000_000_000).try_into().unwrap(), true)
-                },
-                limit_amount: (10010_000_000).try_into().unwrap(),
-            }],
-            lever_swap: array![Swap {
-                route: array![
-                    RouteNode { pool_key, sqrt_ratio_limit: MIN_SQRT_RATIO_LIMIT, skip_ahead: 0 }
-                ],
-                token_amount: TokenAmount {
-                    token: usdc.contract_address,
-                    amount: i129_new((100_000_000).try_into().unwrap(), true)
-                },
-                limit_amount: 30000000000000000, // 0.03 ETH
-            }],
+            margin_swap: array![
+                Swap {
+                    route: array![
+                        RouteNode {
+                            pool_key: pool_key_2,
+                            sqrt_ratio_limit: MAX_SQRT_RATIO_LIMIT,
+                            skip_ahead: 0
+                        }
+                    ],
+                    token_amount: TokenAmount {
+                        token: usdc.contract_address,
+                        amount: i129_new((10000_000_000).try_into().unwrap(), true)
+                    },
+                    limit_amount: (10010_000_000).try_into().unwrap(),
+                }
+            ],
+            lever_swap: array![
+                Swap {
+                    route: array![
+                        RouteNode {
+                            pool_key, sqrt_ratio_limit: MIN_SQRT_RATIO_LIMIT, skip_ahead: 0
+                        }
+                    ],
+                    token_amount: TokenAmount {
+                        token: usdc.contract_address,
+                        amount: i129_new((100_000_000).try_into().unwrap(), true)
+                    },
+                    limit_amount: 30000000000000000, // 0.03 ETH
+                }
+            ],
         };
 
         let modify_lever_params = ModifyLeverParams {
@@ -367,11 +363,11 @@ mod TestMultiply {
         let (_, collateral, _) = singleton
             .position(pool_id, usdc.contract_address, eth.contract_address, user);
 
-        assert!(
-            collateral
-                + 1 == increase_lever_params.margin_swap[0].token_amount.amount.mag.into()
-                + increase_lever_params.lever_swap[0].token_amount.amount.mag.into()
-        );
+        let margin_swap: @Swap = (increase_lever_params.margin_swap[0]);
+        let margin_swap_amount: u256 = (*margin_swap.token_amount.amount.mag).into();
+        let lever_swap: @Swap = (increase_lever_params.lever_swap[0]);
+        let lever_swap_amount: u256 = (*lever_swap.token_amount.amount.mag).into();
+        assert!(collateral + 1 == margin_swap_amount + lever_swap_amount);
 
         assert!(usdt.balanceOf(user) < usdt_balance_before);
         assert!(usdt.balanceOf(user) != 0);
@@ -404,28 +400,36 @@ mod TestMultiply {
             debt_asset: eth.contract_address,
             user,
             add_margin: 0_u128,
-            margin_swap: array![Swap {
-                route: array![
-                    RouteNode {
-                        pool_key: pool_key_2, sqrt_ratio_limit: MAX_SQRT_RATIO_LIMIT, skip_ahead: 0
-                    }
-                ],
-                token_amount: TokenAmount {
-                    token: usdt.contract_address,
-                    amount: i129_new((10000_000_000).try_into().unwrap(), false)
-                },
-                limit_amount: Zero::zero(),
-            }],
-            lever_swap: array![Swap {
-                route: array![
-                    RouteNode { pool_key, sqrt_ratio_limit: MIN_SQRT_RATIO_LIMIT, skip_ahead: 0 }
-                ],
-                token_amount: TokenAmount {
-                    token: usdc.contract_address,
-                    amount: i129_new((100_000_000).try_into().unwrap(), true)
-                },
-                limit_amount: 30000000000000000, // 0.03 ETH
-            }],
+            margin_swap: array![
+                Swap {
+                    route: array![
+                        RouteNode {
+                            pool_key: pool_key_2,
+                            sqrt_ratio_limit: MAX_SQRT_RATIO_LIMIT,
+                            skip_ahead: 0
+                        }
+                    ],
+                    token_amount: TokenAmount {
+                        token: usdt.contract_address,
+                        amount: i129_new((10000_000_000).try_into().unwrap(), false)
+                    },
+                    limit_amount: Zero::zero(),
+                }
+            ],
+            lever_swap: array![
+                Swap {
+                    route: array![
+                        RouteNode {
+                            pool_key, sqrt_ratio_limit: MIN_SQRT_RATIO_LIMIT, skip_ahead: 0
+                        }
+                    ],
+                    token_amount: TokenAmount {
+                        token: usdc.contract_address,
+                        amount: i129_new((100_000_000).try_into().unwrap(), true)
+                    },
+                    limit_amount: 30000000000000000, // 0.03 ETH
+                }
+            ],
         };
 
         let modify_lever_params = ModifyLeverParams {
@@ -437,10 +441,12 @@ mod TestMultiply {
         let (_, collateral, _) = singleton
             .position(pool_id, usdc.contract_address, eth.contract_address, user);
 
+        let margin_swap: @Swap = (increase_lever_params.margin_swap[0]);
+        let margin_swap_amount: u256 = (*margin_swap.token_amount.amount.mag).into();
+        let lever_swap: @Swap = (increase_lever_params.lever_swap[0]);
+        let lever_swap_amount: u256 = (*lever_swap.token_amount.amount.mag).into();
         assert!(
-            collateral == increase_lever_params.margin_swap[0].token_amount.amount.mag.into()
-                + increase_lever_params.lever_swap[0].token_amount.amount.mag.into()
-                + 1593473 // positive swap slippage
+            collateral == margin_swap_amount + lever_swap_amount + 1593473 // positive swap slippage
         );
 
         assert!(usdt.balanceOf(user) < usdt_balance_before);
@@ -462,21 +468,21 @@ mod TestMultiply {
             debt_asset: eth.contract_address,
             user,
             add_margin: 10000_000_000_u128,
-            margin_swap: array![Swap {
-                route: array![],
-                token_amount: TokenAmount { token: Zero::zero(), amount: Zero::zero(), },
-                limit_amount: Zero::zero(),
-            }],
-            lever_swap: array![Swap {
-                route: array![
-                    RouteNode { pool_key, sqrt_ratio_limit: MIN_SQRT_RATIO_LIMIT, skip_ahead: 0 }
-                ],
-                token_amount: TokenAmount {
-                    token: usdc.contract_address,
-                    amount: i129_new((300_000_000).try_into().unwrap(), true)
-                },
-                limit_amount: 90000000000000000, // 0.09 ETH
-            }],
+            margin_swap: array![],
+            lever_swap: array![
+                Swap {
+                    route: array![
+                        RouteNode {
+                            pool_key, sqrt_ratio_limit: MIN_SQRT_RATIO_LIMIT, skip_ahead: 0
+                        }
+                    ],
+                    token_amount: TokenAmount {
+                        token: usdc.contract_address,
+                        amount: i129_new((300_000_000).try_into().unwrap(), true)
+                    },
+                    limit_amount: 90000000000000000, // 0.09 ETH
+                }
+            ],
         };
 
         let modify_lever_params = ModifyLeverParams {
@@ -497,21 +503,23 @@ mod TestMultiply {
             user,
             sub_margin: 0,
             recipient: user,
-            lever_swap: array![Swap {
-                route: array![
-                    RouteNode { pool_key, sqrt_ratio_limit: MAX_SQRT_RATIO_LIMIT, skip_ahead: 0 }
-                ],
-                token_amount: TokenAmount {
-                    token: usdc.contract_address,
-                    amount: i129_new((collateral_amount / 200).try_into().unwrap(), false)
-                },
-                limit_amount: Zero::zero(),
-            }],
-            withdraw_swap: array![Swap {
-                route: array![],
-                token_amount: TokenAmount { token: Zero::zero(), amount: Zero::zero(), },
-                limit_amount: Zero::zero(),
-            }],
+            lever_swap: array![
+                Swap {
+                    route: array![
+                        RouteNode {
+                            pool_key, sqrt_ratio_limit: MAX_SQRT_RATIO_LIMIT, skip_ahead: 0
+                        }
+                    ],
+                    token_amount: TokenAmount {
+                        token: usdc.contract_address,
+                        amount: i129_new((collateral_amount / 200).try_into().unwrap(), false)
+                    },
+                    limit_amount: Zero::zero(),
+                }
+            ],
+            lever_swap_weights: array![],
+            withdraw_swap: array![],
+            withdraw_swap_weights: array![],
             close_position: false
         };
 
@@ -523,10 +531,10 @@ mod TestMultiply {
 
         let (_, collateral, _) = singleton
             .position(pool_id, usdc.contract_address, eth.contract_address, user);
-        assert!(
-            collateral == collateral_amount
-                - decrease_lever_params.lever_swap.token_amount.amount.mag.into()
-        );
+
+        let lever_swap: @Swap = (decrease_lever_params.lever_swap[0]);
+        let lever_swap_amount: u256 = (*lever_swap.token_amount.amount.mag).into();
+        assert!(collateral == collateral_amount - lever_swap_amount);
 
         assert!(usdc.balanceOf(user) == usdc_balance_before);
     }
@@ -546,21 +554,21 @@ mod TestMultiply {
             debt_asset: eth.contract_address,
             user,
             add_margin: 10000_000_000_u128,
-            margin_swap: array![Swap {
-                route: array![],
-                token_amount: TokenAmount { token: Zero::zero(), amount: Zero::zero(), },
-                limit_amount: Zero::zero(),
-            }],
-            lever_swap: array![Swap {
-                route: array![
-                    RouteNode { pool_key, sqrt_ratio_limit: MIN_SQRT_RATIO_LIMIT, skip_ahead: 0 }
-                ],
-                token_amount: TokenAmount {
-                    token: usdc.contract_address,
-                    amount: i129_new((300_000_000).try_into().unwrap(), true)
-                },
-                limit_amount: 90000000000000000, // 0.09 ETH
-            }],
+            margin_swap: array![],
+            lever_swap: array![
+                Swap {
+                    route: array![
+                        RouteNode {
+                            pool_key, sqrt_ratio_limit: MIN_SQRT_RATIO_LIMIT, skip_ahead: 0
+                        }
+                    ],
+                    token_amount: TokenAmount {
+                        token: usdc.contract_address,
+                        amount: i129_new((300_000_000).try_into().unwrap(), true)
+                    },
+                    limit_amount: 90000000000000000, // 0.09 ETH
+                }
+            ],
         };
 
         let modify_lever_params = ModifyLeverParams {
@@ -581,16 +589,10 @@ mod TestMultiply {
             user,
             sub_margin: 1000_000_000_u128,
             recipient: user,
-            lever_swap: array![Swap {
-                route: array![],
-                token_amount: TokenAmount { token: Zero::zero(), amount: Zero::zero(), },
-                limit_amount: Zero::zero(),
-            }],
-            withdraw_swap: array![Swap {
-                route: array![],
-                token_amount: TokenAmount { token: Zero::zero(), amount: Zero::zero(), },
-                limit_amount: Zero::zero(),
-            }],
+            lever_swap: array![],
+            lever_swap_weights: array![],
+            withdraw_swap: array![],
+            withdraw_swap_weights: array![],
             close_position: false
         };
 
@@ -602,13 +604,8 @@ mod TestMultiply {
 
         let (_, collateral, _) = singleton
             .position(pool_id, usdc.contract_address, eth.contract_address, user);
-        assert!(
-            collateral == collateral_amount
-                - (decrease_lever_params.lever_swap[0].token_amount.amount.mag
-                    + decrease_lever_params.sub_margin)
-                    .into()
-        );
 
+        assert!(collateral == collateral_amount - decrease_lever_params.sub_margin.into());
         assert!(usdc.balanceOf(user) > usdc_balance_before);
     }
 
@@ -627,21 +624,21 @@ mod TestMultiply {
             debt_asset: eth.contract_address,
             user,
             add_margin: 10000_000_000_u128,
-            margin_swap: array![Swap {
-                route: array![],
-                token_amount: TokenAmount { token: Zero::zero(), amount: Zero::zero(), },
-                limit_amount: Zero::zero(),
-            }],
-            lever_swap: array![Swap {
-                route: array![
-                    RouteNode { pool_key, sqrt_ratio_limit: MIN_SQRT_RATIO_LIMIT, skip_ahead: 0 }
-                ],
-                token_amount: TokenAmount {
-                    token: usdc.contract_address,
-                    amount: i129_new((100_000_000).try_into().unwrap(), true)
-                },
-                limit_amount: 30000000000000000, // 0.03 ETH
-            }],
+            margin_swap: array![],
+            lever_swap: array![
+                Swap {
+                    route: array![
+                        RouteNode {
+                            pool_key, sqrt_ratio_limit: MIN_SQRT_RATIO_LIMIT, skip_ahead: 0
+                        }
+                    ],
+                    token_amount: TokenAmount {
+                        token: usdc.contract_address,
+                        amount: i129_new((100_000_000).try_into().unwrap(), true)
+                    },
+                    limit_amount: 30000000000000000, // 0.03 ETH
+                }
+            ],
         };
 
         let modify_lever_params = ModifyLeverParams {
@@ -662,21 +659,23 @@ mod TestMultiply {
             user,
             sub_margin: 9999_000_000_u128,
             recipient: user,
-            lever_swap: array![Swap {
-                route: array![
-                    RouteNode { pool_key, sqrt_ratio_limit: MAX_SQRT_RATIO_LIMIT, skip_ahead: 0 }
-                ],
-                token_amount: TokenAmount {
-                    token: eth.contract_address,
-                    amount: i129_new(debt_amount.try_into().unwrap(), true)
-                },
-                limit_amount: 101_000_000_u128,
-            }],
-            withdraw_swap: array![Swap {
-                route: array![],
-                token_amount: TokenAmount { token: Zero::zero(), amount: Zero::zero(), },
-                limit_amount: Zero::zero(),
-            }],
+            lever_swap: array![
+                Swap {
+                    route: array![
+                        RouteNode {
+                            pool_key, sqrt_ratio_limit: MAX_SQRT_RATIO_LIMIT, skip_ahead: 0
+                        }
+                    ],
+                    token_amount: TokenAmount {
+                        token: eth.contract_address,
+                        amount: i129_new(debt_amount.try_into().unwrap(), true)
+                    },
+                    limit_amount: 101_000_000_u128,
+                }
+            ],
+            lever_swap_weights: array![],
+            withdraw_swap: array![],
+            withdraw_swap_weights: array![],
             close_position: false,
         };
 
@@ -688,9 +687,10 @@ mod TestMultiply {
 
         let (_, _, debt) = singleton
             .position(pool_id, usdc.contract_address, eth.contract_address, user);
-        assert!(
-            debt == debt_amount - decrease_lever_params.lever_swap[0].token_amount.amount.mag.into()
-        );
+
+        let lever_swap: @Swap = (decrease_lever_params.lever_swap[0]);
+        let lever_swap_amount: u256 = (*lever_swap.token_amount.amount.mag).into();
+        assert!(debt == debt_amount - lever_swap_amount);
 
         assert!(
             usdc.balanceOf(user) == usdc_balance_before + decrease_lever_params.sub_margin.into()
@@ -722,21 +722,21 @@ mod TestMultiply {
             debt_asset: eth.contract_address,
             user,
             add_margin: 10000_000_000_u128,
-            margin_swap: array![Swap {
-                route: array![],
-                token_amount: TokenAmount { token: Zero::zero(), amount: Zero::zero(), },
-                limit_amount: Zero::zero(),
-            }],
-            lever_swap: array![Swap {
-                route: array![
-                    RouteNode { pool_key, sqrt_ratio_limit: MIN_SQRT_RATIO_LIMIT, skip_ahead: 0 }
-                ],
-                token_amount: TokenAmount {
-                    token: usdc.contract_address,
-                    amount: i129_new((300_000_000).try_into().unwrap(), true)
-                },
-                limit_amount: 90000000000000000, // 0.09 ETH
-            }],
+            margin_swap: array![],
+            lever_swap: array![
+                Swap {
+                    route: array![
+                        RouteNode {
+                            pool_key, sqrt_ratio_limit: MIN_SQRT_RATIO_LIMIT, skip_ahead: 0
+                        }
+                    ],
+                    token_amount: TokenAmount {
+                        token: usdc.contract_address,
+                        amount: i129_new((300_000_000).try_into().unwrap(), true)
+                    },
+                    limit_amount: 90000000000000000, // 0.09 ETH
+                }
+            ],
         };
 
         let modify_lever_params = ModifyLeverParams {
@@ -758,25 +758,37 @@ mod TestMultiply {
             user,
             sub_margin: 0_u128,
             recipient: user,
-            lever_swap: array![Swap {
-                route: array![
-                    RouteNode { pool_key, sqrt_ratio_limit: MAX_SQRT_RATIO_LIMIT, skip_ahead: 0 }
-                ],
-                token_amount: TokenAmount {
-                    token: usdc.contract_address,
-                    amount: i129_new((collateral_amount / 200).try_into().unwrap(), false)
-                },
-                limit_amount: Zero::zero(),
-            }],
-            withdraw_swap: array![Swap {
-                route: array![
-                    RouteNode {
-                        pool_key: pool_key_2, sqrt_ratio_limit: MIN_SQRT_RATIO_LIMIT, skip_ahead: 0
-                    }
-                ],
-                token_amount: TokenAmount { token: usdc.contract_address, amount: Zero::zero(), },
-                limit_amount: Zero::zero(),
-            }],
+            lever_swap: array![
+                Swap {
+                    route: array![
+                        RouteNode {
+                            pool_key, sqrt_ratio_limit: MAX_SQRT_RATIO_LIMIT, skip_ahead: 0
+                        }
+                    ],
+                    token_amount: TokenAmount {
+                        token: usdc.contract_address,
+                        amount: i129_new((collateral_amount / 200).try_into().unwrap(), false)
+                    },
+                    limit_amount: Zero::zero(),
+                }
+            ],
+            lever_swap_weights: array![],
+            withdraw_swap: array![
+                Swap {
+                    route: array![
+                        RouteNode {
+                            pool_key: pool_key_2,
+                            sqrt_ratio_limit: MIN_SQRT_RATIO_LIMIT,
+                            skip_ahead: 0
+                        }
+                    ],
+                    token_amount: TokenAmount {
+                        token: usdc.contract_address, amount: Zero::zero(),
+                    },
+                    limit_amount: Zero::zero(),
+                }
+            ],
+            withdraw_swap_weights: array![SCALE],
             close_position: false,
         };
 
@@ -789,10 +801,9 @@ mod TestMultiply {
         let (_, collateral, _) = singleton
             .position(pool_id, usdc.contract_address, eth.contract_address, user);
 
-        assert!(
-            collateral == collateral_amount
-                - decrease_lever_params.lever_swap[0].token_amount.amount.mag.into()
-        );
+        let lever_swap: @Swap = (decrease_lever_params.lever_swap[0]);
+        let lever_swap_amount: u256 = (*lever_swap.token_amount.amount.mag).into();
+        assert!(collateral == collateral_amount - lever_swap_amount);
 
         assert!(usdc.balanceOf(user) == usdc_balance_before);
         assert!(usdt.balanceOf(user) >= usdt_balance_before);
@@ -816,21 +827,21 @@ mod TestMultiply {
             debt_asset: eth.contract_address,
             user,
             add_margin: 10000_000_000_u128,
-            margin_swap: array![Swap {
-                route: array![],
-                token_amount: TokenAmount { token: Zero::zero(), amount: Zero::zero(), },
-                limit_amount: Zero::zero(),
-            }],
-            lever_swap: array![Swap {
-                route: array![
-                    RouteNode { pool_key, sqrt_ratio_limit: MIN_SQRT_RATIO_LIMIT, skip_ahead: 0 }
-                ],
-                token_amount: TokenAmount {
-                    token: usdc.contract_address,
-                    amount: i129_new((100_000_000).try_into().unwrap(), true)
-                },
-                limit_amount: 30000000000000000, // 0.03 ETH
-            }],
+            margin_swap: array![],
+            lever_swap: array![
+                Swap {
+                    route: array![
+                        RouteNode {
+                            pool_key, sqrt_ratio_limit: MIN_SQRT_RATIO_LIMIT, skip_ahead: 0
+                        }
+                    ],
+                    token_amount: TokenAmount {
+                        token: usdc.contract_address,
+                        amount: i129_new((100_000_000).try_into().unwrap(), true)
+                    },
+                    limit_amount: 30000000000000000, // 0.03 ETH
+                }
+            ],
         };
 
         let modify_lever_params = ModifyLeverParams {
@@ -848,20 +859,22 @@ mod TestMultiply {
             user,
             sub_margin: 0,
             recipient: user,
-            lever_swap: array![Swap {
-                route: array![
-                    RouteNode { pool_key, sqrt_ratio_limit: MAX_SQRT_RATIO_LIMIT, skip_ahead: 0 }
-                ],
-                token_amount: TokenAmount {
-                    token: eth.contract_address, amount: i129_new(0, true)
-                },
-                limit_amount: 101_000_000_u128,
-            }],
-            withdraw_swap: array![Swap {
-                route: array![],
-                token_amount: TokenAmount { token: Zero::zero(), amount: Zero::zero(), },
-                limit_amount: Zero::zero(),
-            }],
+            lever_swap: array![
+                Swap {
+                    route: array![
+                        RouteNode {
+                            pool_key, sqrt_ratio_limit: MAX_SQRT_RATIO_LIMIT, skip_ahead: 0
+                        }
+                    ],
+                    token_amount: TokenAmount {
+                        token: eth.contract_address, amount: i129_new(0, true)
+                    },
+                    limit_amount: 101_000_000_u128,
+                }
+            ],
+            lever_swap_weights: array![SCALE],
+            withdraw_swap: array![],
+            withdraw_swap_weights: array![],
             close_position: true
         };
 
@@ -915,26 +928,28 @@ mod TestMultiply {
             debt_asset: eth.contract_address,
             user,
             add_margin: 10000_000_000_u128,
-            margin_swap: array![Swap {
-                route: array![],
-                token_amount: TokenAmount { token: Zero::zero(), amount: Zero::zero(), },
-                limit_amount: Zero::zero(),
-            }],
-            lever_swap: array![Swap {
-                route: array![
-                    RouteNode {
-                        pool_key: pool_key_3, sqrt_ratio_limit: MIN_SQRT_RATIO_LIMIT, skip_ahead: 0
+            margin_swap: array![],
+            lever_swap: array![
+                Swap {
+                    route: array![
+                        RouteNode {
+                            pool_key: pool_key_3,
+                            sqrt_ratio_limit: MIN_SQRT_RATIO_LIMIT,
+                            skip_ahead: 0
+                        },
+                        RouteNode {
+                            pool_key: pool_key_4,
+                            sqrt_ratio_limit: MAX_SQRT_RATIO_LIMIT,
+                            skip_ahead: 0
+                        }
+                    ],
+                    token_amount: TokenAmount {
+                        token: usdc.contract_address,
+                        amount: i129_new((100_000_000).try_into().unwrap(), true)
                     },
-                    RouteNode {
-                        pool_key: pool_key_4, sqrt_ratio_limit: MAX_SQRT_RATIO_LIMIT, skip_ahead: 0
-                    }
-                ],
-                token_amount: TokenAmount {
-                    token: usdc.contract_address,
-                    amount: i129_new((100_000_000).try_into().unwrap(), true)
-                },
-                limit_amount: 30000000000000000, // 0.03 ETH
-            }],
+                    limit_amount: 30000000000000000, // 0.03 ETH
+                }
+            ],
         };
 
         let modify_lever_params = ModifyLeverParams {
@@ -949,11 +964,9 @@ mod TestMultiply {
         let (_, collateral, _) = singleton
             .position(pool_id, usdc.contract_address, eth.contract_address, user);
 
-        assert!(
-            collateral
-                + 1 == increase_lever_params.add_margin.into()
-                + increase_lever_params.lever_swap[0].token_amount.amount.mag.into()
-        );
+        let lever_swap: @Swap = (increase_lever_params.lever_swap[0]);
+        let lever_swap_amount: u256 = (*lever_swap.token_amount.amount.mag).into();
+        assert!(collateral + 1 == increase_lever_params.add_margin.into() + lever_swap_amount);
 
         assert!(
             usdc.balanceOf(user) == usdc_balance_before - increase_lever_params.add_margin.into()
@@ -985,26 +998,28 @@ mod TestMultiply {
             debt_asset: eth.contract_address,
             user,
             add_margin: 10000_000_000_u128,
-            margin_swap: array![Swap {
-                route: array![],
-                token_amount: TokenAmount { token: Zero::zero(), amount: Zero::zero(), },
-                limit_amount: Zero::zero(),
-            }],
-            lever_swap: array![Swap {
-                route: array![
-                    RouteNode {
-                        pool_key: pool_key_3, sqrt_ratio_limit: MIN_SQRT_RATIO_LIMIT, skip_ahead: 0
+            margin_swap: array![],
+            lever_swap: array![
+                Swap {
+                    route: array![
+                        RouteNode {
+                            pool_key: pool_key_3,
+                            sqrt_ratio_limit: MIN_SQRT_RATIO_LIMIT,
+                            skip_ahead: 0
+                        },
+                        RouteNode {
+                            pool_key: pool_key_4,
+                            sqrt_ratio_limit: MAX_SQRT_RATIO_LIMIT,
+                            skip_ahead: 0
+                        }
+                    ],
+                    token_amount: TokenAmount {
+                        token: usdc.contract_address,
+                        amount: i129_new((100_000_000).try_into().unwrap(), true)
                     },
-                    RouteNode {
-                        pool_key: pool_key_4, sqrt_ratio_limit: MAX_SQRT_RATIO_LIMIT, skip_ahead: 0
-                    }
-                ],
-                token_amount: TokenAmount {
-                    token: usdc.contract_address,
-                    amount: i129_new((100_000_000).try_into().unwrap(), true)
-                },
-                limit_amount: 10000000000000000, // 0.01 ETH
-            }],
+                    limit_amount: 10000000000000000, // 0.01 ETH
+                }
+            ],
         };
 
         let modify_lever_params = ModifyLeverParams {
